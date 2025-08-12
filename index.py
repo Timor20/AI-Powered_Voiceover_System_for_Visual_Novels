@@ -1,89 +1,59 @@
-from PIL import Image
-import PIL.ImageOps
 import pyautogui
 import keyboard
 import pytesseract
-import numpy as np
 import cv2
+import pyglet
+import torch
+from TTS.api import TTS
 
 pytesseract.pytesseract.tesseract_cmd = 'C:/Program Files/Tesseract-OCR/tesseract.exe'
-# /region function parameters are : left, top, width, height
 
 while True:
     try:
-        if keyboard.is_pressed('e'):
+        # Using keyboard press as the trigger for the image-to-text conversion for now
+        if keyboard.is_pressed('`'):
+
+            # region function parameters are : left, top, width, height
             screenshot = pyautogui.screenshot(region=(356, 818, 1214, 174))
             screenshot.save(r'./screenshot.png')
 
             img = cv2.imread("screenshot.png")
-
+            # Convert to gray-scale for easier read for the program
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-            cv2.imwrite('gray1.png', gray)
-
             ret, thresh = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY)
 
-            cv2.imwrite('thresh2.png', thresh)
-            threshText = pytesseract.image_to_string('thresh2.png')
-            print('**** THRESH2.PNG  *****')
-            print(threshText)
-
-            ret, thresh2 = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY_INV)
-
-            cv2.imwrite('thresh.png', thresh2)
+            # Replace the misidentified characters by the image to text conversion
+            cv2.imwrite('thresh.png', thresh)
             threshText = pytesseract.image_to_string('thresh.png')
+            threshText = threshText.replace("|", "I")
+            threshText = threshText.replace("\n", " ")
+            threshText = threshText.replace("L.", "I.")
+            threshText = threshText.replace(".l ", ".I ")
+            threshText = threshText.strip()
             print('**** THRESH.PNG  *****')
             print(threshText)
 
-            img[thresh == 255] = 0
+            # Get device
+            device = "cuda" if torch.cuda.is_available() else "cpu"
 
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-            erosion = cv2.erode(img, kernel, iterations = 1)
+            # List available 🐸TTS models
+            print(TTS().list_models())
 
-            #cv2.namedWindow('image', cv2.WINDOW_NORMAL)
-            #cv2.imshow("image", erosion)
-            #cv2.waitKey(0)
-            #cv2.destroyAllWindows()
+            # Init TTS
+            tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
 
-            cv2.imwrite('screenshot2.png', erosion)
+            # Run TTS
+            # Since this model is multi-lingual voice cloning model, we must set the target speaker_wav and language
+            # Text to speech list of amplitude values as output
+            wav = tts.tts(text=threshText, speaker_wav="voices/bg3_narrator.mp3", language="en")
+            # Text to speech to a file
+            tts.tts_to_file(text=threshText, speaker_wav="voices/bg3_narrator.mp3", language="en", file_path="output/output.mp3")
 
-            text = pytesseract.image_to_string('screenshot.png')
-            text2 = pytesseract.image_to_string('screenshot2.png')
-            print('**** SCREENSHOT.PNG  *****')
-            print(text)
-            print('**** SCREENSHOT2.PNG  *****')
-            print(text2)
+            # Play the audio
+            player = pyglet.media.Player()
+            source = pyglet.media.StaticSource(pyglet.media.load('output/output.mp3'))
+            player.queue(source)
+            player.play()
 
-            in_path  = 'screenshot.png'
-            out_path = 'screenshot3.png'
-
-
-            Image = cv2.imread(in_path)
-            Image2 = np.array(Image, copy=True)
-
-            white_px = np.asarray([255, 255, 255])
-            black_px = np.asarray([0  , 0  , 0  ])
-
-            (row, col, _) = Image.shape
-
-            for r in range(row):
-                for c in range(col):
-                    px = Image[r][c]
-                    if all(px == white_px):
-                        Image2[r][c] = black_px
-
-            cv2.imwrite(out_path, Image2)
-
-            # cv2.imwrite(out_path, Image2)
-            # Image = cv2.imread(in_path)
-            # Image = cv2.bitwise_not(Image)
-            # b,g,r = cv2.split(Image)
-            # z = np.zeros_like(g)
-            # Image = cv2.merge((z,z,b))
-            # cv2.imwrite(out_path, Image)
-
-            text3 = pytesseract.image_to_string('screenshot3.png')
-            print('**** SCREENSHOT3.PNG  *****')
-            print(text3)
     except:
         break
